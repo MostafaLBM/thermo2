@@ -5,10 +5,43 @@ let W=4.5,kT=2.25,sig=0,scaleR=2,cw=4.4,ch=4.1,paused=false,parts=S.map(()=>[]),
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 const g=()=>{let u=0;while(!u)u=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(6.2831853*Math.random())};
 function add(s){cw=W-sig;ch=H-sig;const sd=Math.sqrt(kT/S[s].m);parts[s].push({x:Math.random()*cw,y:Math.random()*ch,vx:g()*sd,vy:g()*sd})}
-function setN(s,n){while(parts[s].length<n)add(s);while(parts[s].length>n)parts[s].pop()}
+// Match each finite sample to the selected temperature in both directions.
+// Without this, random sampling error persists forever for non-interacting particles.
+function thermalize(s){
+  const a=parts[s];if(!a.length)return;
+  for(const axis of ['vx','vy']){
+    const energy=a.reduce((sum,p)=>sum+S[s].m*p[axis]*p[axis],0);
+    if(energy>0){const scale=Math.sqrt(a.length*kT/energy);a.forEach(p=>p[axis]*=scale)}
+    else a.forEach((p,i)=>p[axis]=(i%2?-1:1)*Math.sqrt(kT/S[s].m));
+  }
+}
+function setN(s,n){while(parts[s].length<n)add(s);while(parts[s].length>n)parts[s].pop();thermalize(s)}
 function reset(){cw=W-sig;ch=H-sig;parts=S.map(()=>[]);S.forEach((s,i)=>setN(i,s.N));Pm=[null,null]}
 function ema(dt,imp){const per=2*(W+H),a=Math.min(1,dt/TAU);for(let s=0;s<2;s++){const r=imp[s]/(dt*per);Pm[s]=Pm[s]===null?r:Pm[s]+(r-Pm[s])*a}}
 function step(dt){cw=W-sig;ch=H-sig;const imp=[0,0],n=3;for(let k=0;k<n;k++){move(dt/n,imp);collide()}ema(dt,imp)}
+// Three independent systems: mixture, A alone, and B alone.
+let isolated=[],comparisonTime=0;
+function resetComparison(){
+  S.forEach((_,i)=>thermalize(i));
+  const mixture=parts;
+  isolated=S.map((_,species)=>{
+    const gas=S.map((_,i)=>i===species?mixture[i].map(p=>({...p})):[]);
+    return {parts:gas,pressure:[null,null]};
+  });
+  Pm=[null,null];comparisonTime=0;
+}
+function advanceComparison(dt){
+  step(dt);
+  const mixture=parts,pressure=Pm;
+  try{
+    for(const system of isolated){
+      parts=system.parts;Pm=system.pressure;
+      step(dt);
+      system.pressure=Pm;
+    }
+  }finally{parts=mixture;Pm=pressure}
+  comparisonTime+=dt;
+}
 function collide(){
   if(sig<=0)return;
   const all=[];for(let s=0;s<2;s++)for(const p of parts[s]){p.s=s;all.push(p)}
@@ -48,16 +81,33 @@ function draw(){
 }
 const f=(x,d=2)=>x==null?'–':x.toFixed(d);
 function table(){
-  const A=W*H,Nt=parts.reduce((a,p)=>a+p.length,0);let sm=0,th=0,h='',bar='';
-  const eta=Nt*Math.PI*sig*sig/4/A;
-  const id=Math.max(1e-9,Nt*kT/A),r=Pm.reduce((a,b)=>a+(b||0),0)/id;if(r>.9*scaleR)scaleR=Math.ceil(r/.75);else if(r<.4*scaleR)scaleR=Math.max(2,Math.ceil(r/.75));const Pmax=id*scaleR;
-  for(let s=0;s<2;s++){const N=parts[s].length,t=N*kT/A,v=N?Pm[s]:0;sm+=v||0;th+=t;
-    h+=`<tr><td><span class="dot" style="background:${S[s].c}"></span>${S[s].n} (m=${S[s].m})</td><td>${N}</td><td>${f(Nt?N/Nt:0)}</td><td>${f(v)}</td><td>${f(t)}</td></tr>`;
-    bar+=`<i style="width:${100*(v||0)/Pmax}%;background:${S[s].c}"></i>`}
-  h+=`<tr class="tot"><td>Total</td><td>${Nt}</td><td>${Nt?'1.00':'–'}</td><td>${f(sm)}</td><td>${f(th)}</td></tr>`;
-  document.getElementById('tb').innerHTML=h;
-  document.getElementById('bar').innerHTML=bar+`<span class="mk" style="left:${100*th/Pmax}%"></span>`;
-  document.getElementById('mP').textContent=f(sm);document.getElementById('mE').textContent=eta.toFixed(3);document.getElementById('mR').textContent=th>0?(sm/th).toFixed(2):'–';
+  const count=parts.reduce((sum,a)=>sum+a.length,0),area=W*H;
+  const measured=Pm.reduce((sum,p)=>sum+(p||0),0);
+  const alone=S.map((_,i)=>parts[i].length?(isolated[i]?.pressure[i]??null):0);
+  const ready=alone.every(p=>p!==null)&&Pm.every((p,i)=>!parts[i].length||p!==null);
+  const aloneSum=alone.reduce((sum,p)=>sum+(p||0),0),ideal=count*kT/area;
+  document.getElementById('model-status').textContent=(sig===0
+    ? 'Ideal gases: the individual pressures add to the mixture pressure.'
+    : 'Nonideal gases: the individual pressures generally do not add to the mixture pressure.')
+    +(comparisonTime<10?' Allow at least 10 seconds of simulation time for pressure averages to settle.':'');
+  document.getElementById('mP').textContent=ready?f(measured):'–';
+  document.getElementById('mE').textContent=ready?f(aloneSum):'–';
+  document.getElementById('mR').textContent=ready&&aloneSum>0?f(measured/aloneSum):'–';
+  let rows='';
+  for(let i=0;i<2;i++){
+    const n=parts[i].length;
+    rows+=`<tr><td><span class="dot" style="background:${S[i].c}"></span>${S[i].n} (m=${S[i].m})</td><td>${n}</td><td>${f(count?n/count:0)}</td><td>${f(alone[i])}</td></tr>`;
+  }
+  rows+=`<tr><td>Total / sum</td><td>${count}</td><td>${count?'1.00':'–'}</td><td>${ready?f(aloneSum):'–'}</td></tr>`;
+  document.getElementById('tb').innerHTML=rows;
+  const max=Math.max(measured,aloneSum,ideal,1e-9)*1.15;
+  document.getElementById('bar').innerHTML=`<i style="width:${100*measured/max}%;background:var(--teal)"></i>`;
+  document.getElementById('alone-bar').innerHTML=alone.map((p,i)=>`<i style="width:${100*(p||0)/max}%;background:${S[i].c}"></i>`).join('');
+  document.getElementById('comparison-readout').textContent=!count
+    ? 'Empty box: both pressures are zero; the ratio is undefined.'
+    : !ready?'Collecting wall impacts in all three systems…'
+    : `Mixture − (A alone + B alone) = ${f(measured-aloneSum)} reduced pressure units. `
+      +(sig===0?'Expected long-time difference: zero.':'Nonideal gases: compare the gap between the bars. At very low density the difference may be small.');
 }
 // controls
 const sl=document.getElementById('sl');
@@ -68,12 +118,12 @@ S.forEach((s,i)=>{const r=document.createElement('div');r.className='row';
 const Tv=document.getElementById('Tv'),Wv=document.getElementById('Wv');
 Tv.textContent=kT.toFixed(2);Wv.textContent=W.toFixed(1);
 document.getElementById('T').addEventListener('input',e=>{const n=+e.target.value,k=Math.sqrt(n/kT);
-  parts.forEach(a=>a.forEach(p=>{p.vx*=k;p.vy*=k}));kT=n;Tv.textContent=n.toFixed(2)});
+  parts.forEach(a=>a.forEach(p=>{p.vx*=k;p.vy*=k}));kT=n;S.forEach((_,i)=>thermalize(i));Tv.textContent=n.toFixed(2)});
 document.getElementById('W').addEventListener('input',e=>{const n=+e.target.value,k=(n-sig)/(W-sig);
   parts.forEach(a=>a.forEach(p=>{p.x*=k}));W=n;Wv.textContent=n.toFixed(1)});
 const Dv=document.getElementById('Dv');Dv.textContent=sig.toFixed(2);
 document.getElementById('D').addEventListener('input',e=>{const n=+e.target.value,kx=(W-n)/(W-sig),ky=(H-n)/(H-sig);
-  parts.forEach(a=>a.forEach(p=>{p.x*=kx;p.y*=ky}));sig=n;Dv.textContent=n.toFixed(2)});
+  parts.forEach(a=>a.forEach(p=>{p.x*=kx;p.y*=ky}));sig=n;if(sig===0)S.forEach((_,i)=>thermalize(i));Dv.textContent=n.toFixed(2)});
 document.getElementById('pp').onclick=e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause'};
 document.getElementById('rs').onclick=()=>{location.reload()};
 for(const range of document.querySelectorAll('input[type=range]')){
@@ -81,14 +131,24 @@ for(const range of document.querySelectorAll('input[type=range]')){
   for(const key of ['min','max','step']) if(range.hasAttribute(key)) number.setAttribute(key,range.getAttribute(key));
   number.value=range.value;number.setAttribute('aria-label',range.labels[0].textContent+' numeric entry');
   range.after(number);
-  range.addEventListener('input',()=>{number.value=range.value;Pm=[null,null]});
+  range.addEventListener('input',()=>{number.value=range.value;resetComparison();table()});
   number.addEventListener('change',()=>{if(!number.validity.valid||number.value===''){number.value=range.value;return}range.value=number.value;range.dispatchEvent(new Event('input'))});
 }
+function chooseDemo(diameter){
+  for(const [id,value] of [['n0',100],['n1',100],['T',2.25],['W',4.5],['D',diameter]]){
+    const input=document.getElementById(id);input.value=value;input.dispatchEvent(new Event('input'));
+  }
+  paused=false;document.getElementById('pp').textContent='Pause';
+}
+document.getElementById('ideal-demo').onclick=()=>chooseDemo(0);
+document.getElementById('nonideal-demo').onclick=()=>chooseDemo(.15);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',readCss);
 addEventListener('resize',resize);
-readCss();resize();reset();
+// Results can become visible after a phone tab switch without a window resize.
+if(typeof ResizeObserver!=='undefined')new ResizeObserver(resize).observe(cv);
+readCss();resize();reset();resetComparison();table();
 let last=performance.now(),tt=0;
 function loop(t){const dt=Math.min((t-last)/1000,1/30);last=t;
-  if(!paused&&dt>0)step(dt);draw();tt+=dt;if(tt>.2){tt=0;table()}
+  if(!paused&&dt>0)advanceComparison(dt);draw();tt+=dt;if(tt>.2){tt=0;table()}
   requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
