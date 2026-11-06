@@ -62,3 +62,7 @@ At widths of 700 px or less, both applets offer sticky Inputs / Results tabs, to
 ## Joule–Thomson applet (Chapter 12)
 
 Open applets/joule-thomson/index.html through the course server or website. Seven real fluids, an analytical ideal-gas comparison, local inlet derivative, numerical inversion overlay, two-phase outlet handling, and guided experiments. Reuses the CoolProp engine in applets/vapor-compression/vendor; retain that folder. See the applet README for assumptions and units. Validated against 39 Python CoolProp 7.2.0 reference states, finite-difference inlet slopes, enthalpy conservation, and positive entropy generation.
+
+## Ideal gas mixture (Chapter 13)
+
+Open `applets/ideal-gas-mixture/index.html` from the fourth homepage card. Two-species particle simulation with ideal partial-pressure comparison, numeric entry, and the shared responsive applet layout. See its README for units and model limits.
