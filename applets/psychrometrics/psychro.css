@@ -1,0 +1,85 @@
+.selector-label{display:block;margin:17px 0 7px;font-size:12px;font-weight:650}
+.preset-toggle{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:13px;min-height:32px;cursor:pointer}
+.preset-toggle input{width:20px;height:20px;accent-color:var(--teal)}
+.scenario-details{font-size:12px;border-bottom:1px solid var(--border);padding-bottom:14px}
+.scenario-details summary{cursor:pointer;min-height:30px;color:var(--teal)}
+.scenario-details p{margin:8px 0;color:var(--muted)}
+.scenario-details ul{margin:8px 0;padding-left:18px;color:var(--muted)}
+.psychro .number-wrap input{width:90px}
+.psychro .number-wrap small{width:36px}
+.psychro .control label{max-width:150px}
+.psychro .control{margin:16px 0}
+.psychro .tag{max-width:220px;white-space:normal}
+.psychro .controls select{min-height:44px}
+.psychro input[type=number]{font-variant-numeric:tabular-nums}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+.pick button{min-height:44px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--ink);font:650 13px system-ui;cursor:pointer;text-align:left;padding:6px 10px;line-height:1.25}
+.pick button small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+.pick button[aria-checked=true]{background:var(--teal);border-color:var(--teal);color:#fff}
+.pick button[aria-checked=true] small{color:#d9ece9}
+.state-group{border:0;border-top:1px solid var(--border);margin:18px 0 0;padding:14px 0 0;min-width:0}
+.state-group legend{display:flex;align-items:center;gap:8px;padding:0 8px 0 0;font-size:14px;font-weight:700;color:var(--ink)}
+.state-group legend i{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--ink);background:var(--white);font:700 12px system-ui;font-style:normal}
+.state-group select{margin-top:10px}
+.psychro .controls .option label{font-weight:550;font-size:13px}
+.psychro .controls .option{margin-top:16px;padding-top:12px}
+.psychro .controls .option+.option{border-top:0;margin-top:0;padding-top:0}
+.cursor-readout{min-height:20px;font-variant-numeric:tabular-nums}
+.chart-scroll svg{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none}
+.chart-scroll{overflow-x:auto}
+.chart-scroll:focus-visible{outline:3px solid #bb8c33;outline-offset:3px}
+.psychro svg .rh-line{stroke:#5f9a94;stroke-width:1;fill:none}
+.psychro svg .sat-line{stroke:#176c67;stroke-width:2.2;fill:none}
+.psychro svg .h-line{stroke:#c15a2c;stroke-width:1;fill:none;opacity:.75}
+.psychro svg .wb-line{stroke:#3372a3;stroke-width:1;fill:none;opacity:.8}
+.psychro svg .v-line{stroke:#7953a0;stroke-width:1;fill:none;stroke-dasharray:4 3;opacity:.75}
+.psychro svg .oversat{fill:#e9eee8}
+.psychro svg .frame{fill:none;stroke:#70817e;stroke-width:1}
+.psychro svg .lbl{font-size:10px;paint-order:stroke;stroke:#fffefa;stroke-width:3px;stroke-linejoin:round}
+.psychro svg .lbl.rh{fill:#2f6f69}.psychro svg .lbl.h{fill:#a2481f}.psychro svg .lbl.wb{fill:#2a6190}.psychro svg .lbl.v{fill:#68428d}
+.psychro svg .proc{stroke:#19363d;stroke-width:3;fill:none;stroke-linecap:round}
+.psychro svg .split{stroke:#19363d;stroke-width:1.4;fill:none;stroke-dasharray:2 4;opacity:.8}
+.psychro svg .split-label{font-size:10.5px;fill:#19363d;paint-order:stroke;stroke:#fffefa;stroke-width:3px}
+.psychro svg .drop{stroke:#19363d;stroke-width:1;stroke-dasharray:3 4;opacity:.5}
+.psychro svg .adp-line{stroke:#19363d;stroke-width:1.6;stroke-dasharray:6 4;fill:none}
+.psychro svg .handle{cursor:grab;touch-action:none}
+.psychro svg .handle:active{cursor:grabbing}
+.psychro svg .ring{fill:none;stroke:#176c67;stroke-width:2.5}
+.legend .ink{background:#19363d}.legend .rh{background:#5f9a94}.legend .vol{background:#7953a0}
+.psychro .plot-panel>.chart-scroll{min-height:150px}
+.balance small{font:12px system-ui;color:var(--muted)}
+@media(max-width:900px){.psychro .number-wrap input{width:80px}.psychro .control label{max-width:115px}.psychro h1{font-size:44px}}
+@media(max-width:700px){.psychro h1{font-size:34px}.psychro header{flex-wrap:wrap}.psychro .number-wrap input{width:105px;font-size:16px}.psychro .control label{max-width:none}.psychro .chart-scroll svg{min-width:640px}.psychro .controls select{font-size:16px}.psychro .metrics strong{font-size:25px}}
+
+.psychro svg .hum-steam{stroke:#c15a2c;stroke-width:3;fill:none;stroke-linecap:round}
+.psychro svg .hum-water{stroke:#3372a3;stroke-width:3;fill:none;stroke-linecap:round}
+.psychro svg .duct{fill:#f1f4ee;stroke:#78918b;stroke-width:1.5}
+.psychro svg .fin{stroke:#78918b;stroke-width:1.5}
+
+/* Compact fixed header on wide screens: title and intro share a line, metrics are one row. */
+@media screen and (min-width:701px){
+ .psychro .course-back{margin-bottom:2px}
+ .psychro .course-back a{min-height:26px}
+ .psychro header{margin-bottom:8px;gap:12px}
+ .psychro header>div{display:flex;align-items:baseline;gap:6px 16px;flex-wrap:wrap}
+ .psychro header .eyebrow{display:none}
+ .psychro h1{font-size:26px;line-height:1.15;margin:0;letter-spacing:-.02em}
+ .psychro .intro{font-size:13px}
+ .psychro header .reset{min-height:34px;padding:5px 14px;font-size:13px}
+ .psychro .metrics{padding:7px 0;margin-bottom:10px}
+ .psychro .metrics>div{flex-direction:row;align-items:baseline;flex-wrap:wrap;gap:0 10px;padding:0 20px}
+ .psychro .metrics span{font-size:12px}
+ .psychro .metrics strong{font-size:21px;line-height:1.25}
+ .psychro .metrics small{font-size:11px}
+}
+
+.comp-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.comp-title{display:flex;align-items:center;gap:8px}
+.comp-title i{display:inline-grid;place-items:center;min-width:28px;height:22px;padding:0 4px;border-radius:11px;border:1.5px solid var(--ink);background:var(--white);font:700 11px system-ui;font-style:normal}
+.comp-tools{display:flex;gap:4px;flex-shrink:0}
+.comp-tools button{min-width:36px;min-height:36px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--ink);font:600 14px system-ui;cursor:pointer}
+.comp-tools button:disabled{opacity:.35;cursor:not-allowed}
+.add-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:12px}
+.add-row button{min-height:44px;border:1px dashed #7e9a93;border-radius:6px;background:var(--white);color:var(--teal);font:650 12px system-ui;cursor:pointer;padding:4px}
+.add-row button:hover:not(:disabled){background:#eaf0e8}
+.add-row button:disabled{opacity:.4;cursor:not-allowed}
