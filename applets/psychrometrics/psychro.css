@@ -83,3 +83,6 @@
 .add-row button{min-height:44px;border:1px dashed #7e9a93;border-radius:6px;background:var(--white);color:var(--teal);font:650 12px system-ui;cursor:pointer;padding:4px}
 .add-row button:hover:not(:disabled){background:#eaf0e8}
 .add-row button:disabled{opacity:.4;cursor:not-allowed}
+
+.pick.three{grid-template-columns:repeat(3,1fr)}
+.pick.three button{padding:6px 7px;font-size:12.5px}

@@ -5,7 +5,8 @@ const M = window.Psychro, $ = id => document.getElementById(id);
 const {TMIN, TMAX, WCAP} = M;
 const X0 = 40, X1 = 690, Y0 = 30, Y1 = 440;
 const sx = t => X0 + (t - TMIN) / (TMAX - TMIN) * (X1 - X0);
-const sy = Wg => Y1 - Wg / WCAP * (Y1 - Y0);
+let wTop = WCAP;
+const sy = Wg => Y1 - Wg / wTop * (Y1 - Y0);
 const KIND = {
   rh: {label: 'Relative humidity', unit: '%', d: 1},
   wb: {label: 'Wet-bulb temperature', unit: '°C', d: 2},
@@ -93,8 +94,30 @@ const ductScenarios = [
    notes: ['Inlet 10 °C, 30 % RH', 'C1 heating coil, surface 40 °C, BF 0.20', 'C2 humidifier, liquid water 15 °C, 5 g/kg'],
    build: () => ({s1: {t: 10, kind: 'rh', val: 30}, duct: [C('heat', 40, 0.2), H('water', 15, 5)]})}
 ];
+const towerScenarios = [
+  {name: 'Cool humid day vs hot dry day',
+   why: 'One tower, two climates. On the cool humid day the warm, saturated exit air is far lighter than the ambient air. On the hot dry day the exit air is cooler than the ambient dry bulb and the density difference nearly vanishes.',
+   context: 'The draft head falls by roughly an order of magnitude, so the tower moves far less air and the cold-water temperature drifts away from the wet bulb.',
+   notes: ['Climate 1: 15 °C, 80 % RH', 'Climate 2: 45 °C, 10 % RH', 'Hot water 40 °C, 6000 kg/s, tower height 110 m'],
+   build: () => ({s1: {t: 15, kind: 'rh', val: 80}, s2: {t: 45, kind: 'rh', val: 10}, tower: {Tin: 40, L: 6000, H: 110}})},
+  {name: 'Mild day vs hot dry day',
+   why: 'A typical mild day against the hot dry extreme, same tower and water side.',
+   context: 'Compare the temperature and humidity bars in the density budget: the humidity term stays similar but the temperature term turns negative.',
+   notes: ['Climate 1: 25 °C, 50 % RH', 'Climate 2: 45 °C, 10 % RH', 'Hot water 40 °C, 6000 kg/s, tower height 110 m'],
+   build: () => ({s1: {t: 25, kind: 'rh', val: 50}, s2: {t: 45, kind: 'rh', val: 10}, tower: {Tin: 40, L: 6000, H: 110}})},
+  {name: 'Hot humid day vs hot dry day',
+   why: 'Both days are hot. The humid day still has a small wet-bulb depression but a better draft than the dry day.',
+   context: 'Hot and humid is hard for cooling (small approach to the wet bulb); hot and dry is hard for draft.',
+   notes: ['Climate 1: 35 °C, 60 % RH', 'Climate 2: 45 °C, 10 % RH', 'Hot water 40 °C, 6000 kg/s, tower height 110 m'],
+   build: () => ({s1: {t: 35, kind: 'rh', val: 60}, s2: {t: 45, kind: 'rh', val: 10}, tower: {Tin: 40, L: 6000, H: 110}})},
+  {name: 'Taller tower, mild vs hot dry',
+   why: 'Draft head is proportional to height, so a taller stack should help the hot dry day. How much it helps is the question.',
+   context: 'Compare with the 110 m case: raising the stack from 110 m to 200 m raises the hot-dry air flow by only about 8 %, because losses grow with the square of the flow and the cooling gets no cheaper.',
+   notes: ['Climate 1: 25 °C, 50 % RH', 'Climate 2: 45 °C, 10 % RH', 'Hot water 40 °C, 6000 kg/s, tower height 200 m'],
+   build: () => ({s1: {t: 25, kind: 'rh', val: 50}, s2: {t: 45, kind: 'rh', val: 10}, tower: {Tin: 40, L: 6000, H: 200}})}
+];
 const compTitle = c => c.type === 'hum' ? 'Humidifier' : c.kind === 'cool' ? 'Cooling coil' : 'Heating coil';
-let state = {mode: 'free', ductScenario: 0, duct: [],
+let state = {mode: 'free', ductScenario: 0, duct: [], towerScenario: 0, tower: {Tin: 40, L: 6000, H: 110},
   alt: 0, flow: 1, active: 0, preset: true, scenario: 0, s: [],
   layers: {rh: true, h: true, wb: false, v: true, sl: true}};
 let note = '', bgKey = '', fg = null, drag = null;
@@ -168,9 +191,12 @@ $('add-cool').addEventListener('click', () => addComp(C('cool', 8, 0.2)));
 $('add-heat').addEventListener('click', () => addComp(C('heat', 40, 0.3)));
 $('add-hum').addEventListener('click', () => addComp(H('steam', 100, 3)));
 
+mkControl($('tower-group'), 'Tin', 'Hot-water inlet temperature', '°C', 30, 50);
+mkControl($('tower-group'), 'Lw', 'Water flow', 'kg/s', 2000, 10000);
+mkControl($('tower-group'), 'Ht', 'Tower height', 'm', 50, 200);
 function setVal(key, v) {
   const m = /^([tv])([01])$/.exec(key);
-  if (m) { const s = state.s[+m[2]]; if (m[1] === 't') s.t = v; else s.val = v; } else if (/^d\d+-/.test(key)) { const [, i, k] = /^d(\d+)-(.+)$/.exec(key); state.duct[+i][k] = v; } else state[key] = v;
+  if (m) { const s = state.s[+m[2]]; if (m[1] === 't') s.t = v; else s.val = v; } else if (key === 'Tin' || key === 'Lw' || key === 'Ht') state.tower[{Tin: 'Tin', Lw: 'L', Ht: 'H'}[key]] = v; else if (/^d\d+-/.test(key)) { const [, i, k] = /^d(\d+)-(.+)$/.exec(key); state.duct[+i][k] = v; } else state[key] = v;
   state.preset = false; update();
 }
 function sync() {
@@ -188,12 +214,23 @@ function sync() {
   setCtl('flow', state.flow, 0.01, 20, 2, 'm³/s');
   setCtl('alt', state.alt, 0, 3000, 0, 'm');
   [0, 1].forEach(i => { const on = state.active === i; $(`pick-${i}`).setAttribute('aria-checked', on); });
-  const dm = state.mode === 'duct';
+  const dm = state.mode === 'duct', tm = state.mode === 'tower';
+  wTop = tm ? 70 : WCAP;
   if (dm) state.active = 0;
   $('grp-1').hidden = $('pick-wrap').hidden = dm; $('duct-controls').hidden = !dm;
-  $('proc-panel').hidden = dm; $('duct-panel').hidden = $('duct-account').hidden = !dm;
+  $('proc-panel').hidden = dm || tm; $('tower-controls').hidden = !tm; $('tower-panel').hidden = $('tower-account').hidden = !tm;
+  ctl.flow.number.closest('.control').hidden = tm;
+  $('grp-0').querySelector('legend').innerHTML = `<i aria-hidden="true">1</i>${tm ? 'Climate 1 · reference' : 'State 1 · inlet'}`;
+  $('grp-1').querySelector('legend').innerHTML = `<i aria-hidden="true">2</i>${tm ? 'Climate 2' : 'State 2 · outlet'}`;
+  $('pick-0').innerHTML = tm ? 'Climate 1<small>reference</small>' : 'State 1<small>inlet</small>';
+  $('pick-1').innerHTML = tm ? 'Climate 2<small>comparison</small>' : 'State 2<small>outlet</small>'; $('duct-panel').hidden = $('duct-account').hidden = !dm;
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-checked', b.dataset.mode === state.mode));
-  $('chart-eyebrow').textContent = dm ? 'DRAG POINT 1 · OTHER POINTS ARE COMPUTED' : 'DRAG THE NUMBERED POINTS';
+  $('chart-eyebrow').textContent = dm ? 'DRAG POINT 1 · OTHER POINTS ARE COMPUTED' : tm ? 'DRAG THE AMBIENT POINTS · PRIMED POINTS ARE EXIT AIR' : 'DRAG THE NUMBERED POINTS';
+  if (tm) {
+    const T = state.tower;
+    T.Tin = clamp(T.Tin, 30, 50); T.L = clamp(T.L, 2000, 10000); T.H = clamp(T.H, 50, 200);
+    setCtl('Tin', T.Tin, 30, 50, 1, '°C'); setCtl('Lw', T.L, 2000, 10000, 0, 'kg/s'); setCtl('Ht', T.H, 50, 200, 0, 'm');
+  }
   if (dm) {
     let cur = derive(0, p);
     state.duct.forEach((c, i) => {
@@ -227,11 +264,12 @@ function setCtl(key, val, lo, hi, d, unit) {
 }
 
 /* ---------- scenarios ---------- */
-const scList = () => state.mode === 'duct' ? ductScenarios : scenarios;
+const scList = () => state.mode === 'duct' ? ductScenarios : state.mode === 'tower' ? towerScenarios : scenarios;
 function applyScenario() {
-  const dm = state.mode === 'duct', idx = dm ? state.ductScenario : state.scenario, sc = scList()[idx], p = P();
+  const dm = state.mode === 'duct', tm = state.mode === 'tower', idx = dm ? state.ductScenario : tm ? state.towerScenario : state.scenario, sc = scList()[idx], p = P();
   $('scenario').innerHTML = scList().map((x, k) => `<option value="${k}">${x.name}</option>`).join('');
   if (dm) { const b = sc.build(p); state.s = [{...b.s1}, {...b.s1}]; state.duct = b.duct.map(x => ({...x})); buildDuctList(); }
+  else if (tm) { const b = sc.build(p); state.s = [{...b.s1}, {...b.s2}]; state.tower = {...b.tower}; }
   else state.s = sc.build(p).map(x => ({...x}));
   state.preset = true;
   $('scenario').value = idx;
@@ -240,9 +278,9 @@ function applyScenario() {
   $('scenario-details').innerHTML = `<p>Illustrative setup:</p><ul>${sc.notes.map(n => `<li>${n}</li>`).join('')}</ul><p>Teaching assumptions, not equipment ratings.</p>`;
   update();
 }
-$('scenario').addEventListener('change', () => { state[state.mode === 'duct' ? 'ductScenario' : 'scenario'] = Number($('scenario').value); applyScenario(); });
+$('scenario').addEventListener('change', () => { state[{duct: 'ductScenario', tower: 'towerScenario'}[state.mode] || 'scenario'] = Number($('scenario').value); applyScenario(); });
 $('preset').addEventListener('change', () => { if ($('preset').checked) applyScenario(); else { state.preset = false; sync(); } });
-$('reset').addEventListener('click', () => { state.alt = 0; state.flow = 1; state.scenario = 0; state.ductScenario = 0; applyScenario(); });
+$('reset').addEventListener('click', () => { state.alt = 0; state.flow = 1; state.scenario = 0; state.ductScenario = 0; state.towerScenario = 0; applyScenario(); });
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { if (state.mode !== b.dataset.mode) { state.mode = b.dataset.mode; applyScenario(); } }));
 [0, 1].forEach(i => $(`pick-${i}`).addEventListener('click', () => { state.active = i; sync(); renderChart(lastDerived); }));
 for (const k of ['rh', 'h', 'wb', 'v', 'sl']) $(`layer-${k}`).addEventListener('change', e => { state.layers[k] = e.target.checked; renderChart(lastDerived); });
@@ -261,6 +299,12 @@ function update() {
     const lim = r.steps.findIndex(x => x.clamped);
     if (lim >= 0 && !note) note = `C${lim + 1} injection limited so its outlet stays unsaturated and on the chart.`;
     renderDuct(d);
+  } else if (state.mode === 'tower') {
+    const b = derive(1, p), t1 = M.tower(a, state.tower, p), t2 = M.tower(b, state.tower, p);
+    d = {mode: 'tower', a, b, t1, t2, p};
+    const bad = [t1, t2].findIndex(x => !x.ok);
+    if (bad >= 0 && !note) note = `Climate ${bad + 1}: ${[t1, t2][bad].reason}`;
+    renderTower(d);
   } else {
     const b = derive(1, p);
     d = {mode: 'free', a, b, pr: M.process(a, b, p, state.flow), p};
@@ -269,6 +313,7 @@ function update() {
   lastDerived = d; window.currentProcess = d;
   renderChart(d);
   if (state.mode === 'duct') drawDuct(d);
+  if (state.mode === 'tower') drawBudget(d);
   $('status').textContent = note || 'Moist-air properties: ASHRAE Fundamentals correlations; enhancement factor neglected.';
   note = '';
 }
@@ -311,6 +356,79 @@ function renderDuct({a, r, p}) {
   $('chart-tag').textContent = `p = ${p.toFixed(3)} kPa · Z = ${Math.round(state.alt)} m`;
 }
 
+function renderTower({a, b, t1, t2, p}) {
+  const v = (r, fn) => r.ok ? fn(r) : '—', pair = fn => `${v(t1, fn)} → ${v(t2, fn)}`;
+  setMetrics('Air flow, 1 → 2', 'kg/s · natural draft', 'Draft head, 1 → 2', 'Pa · g·H·(ρ amb − ρ exit)', 'Approach, 1 → 2', 'K · cold water − wet bulb');
+  $('qtot-m').textContent = pair(r => fx(r.G, 0)); $('shr').textContent = pair(r => fx(r.dp, 1)); $('water-m').textContent = pair(r => fx(r.approach, 1));
+  const rows = [
+    ['Ambient dry bulb / RH', (r, s) => `${fx(s.t, 1)} °C / ${fx(s.rh, 0)} %`, true],
+    ['Ambient wet bulb', (r, s) => `${fx(s.twb, 1)} °C`, true],
+    ['Air flow, G', r => `${fx(r.G, 0)} kg/s`],
+    ['Water-to-air ratio, L/G', r => fx(r.LG, 2)],
+    ['Draft head', r => `${fx(r.dp, 1)} Pa`],
+    ['Density difference, ρ amb − ρ exit', r => `${fx(r.drho * 1000, 1)} g/m³`],
+    ['… temperature effect', r => `${sg(r.dTpart * 1000, 1)} g/m³`],
+    ['… humidity effect', r => `${sg(r.dHpart * 1000, 1)} g/m³`],
+    ['Cold-water temperature', r => `${fx(r.Tout, 1)} °C`],
+    ['Range', r => `${fx(r.range, 1)} K`],
+    ['Approach', r => `${fx(r.approach, 1)} K`],
+    ['Heat rejected', r => `${fx(r.Q, 1)} MW`],
+    ['Evaporation (make-up)', r => `${fx(r.evap, 1)} kg/s · ${fx(r.makeup, 2)} % of L`],
+    ['Exit air, t / RH', r => `${fx(r.e.t, 1)} °C / ${fx(r.e.rh, 0)} %`],
+    ['Visible plume at mixing with ambient', r => r.visible ? 'yes' : 'no']
+  ];
+  $('tower-rows').innerHTML = rows.map(([lab, fn, amb]) => `<tr><td>${lab}</td>${[[t1, a], [t2, b]].map(([r, s]) => `<td>${amb ? fn(r, s) : r.ok ? fn(r) : '—'}</td>`).join('')}</tr>`).join('');
+  const sr = [[a, '1', 'Ambient, climate 1']];
+  if (t1.ok) sr.push([t1.e, '1′', 'Exit air, climate 1']);
+  sr.push([b, '2', 'Ambient, climate 2']);
+  if (t2.ok) sr.push([t2.e, '2′', 'Exit air, climate 2']);
+  $('states').innerHTML = stateRows(sr);
+  $('chart-tag').textContent = `p = ${p.toFixed(3)} kPa · Z = ${Math.round(state.alt)} m`;
+}
+const TCOL = ['#19363d', '#c15a2c'];
+function buildFgTower({a, b, t1, t2}) {
+  let s = '';
+  [[a, t1], [b, t2]].forEach(([amb, r], i) => {
+    const col = TCOL[i], x = sx(amb.t), y = sy(amb.Wg);
+    s += `<line class="drop" x1="${x}" x2="${x}" y1="${y}" y2="${Y1}"/>`;
+    if (!r.ok) return;
+    const pts = r.path.map(q => [sx(q.t), sy(q.Wg)]), mid = pts[Math.floor(pts.length / 2)], nxt = pts[Math.floor(pts.length / 2) + 1];
+    s += `<path d="M${r.mix.map(q => sx(q[0]).toFixed(1) + ' ' + sy(q[1]).toFixed(1)).join('L')}" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="2 4" opacity=".75"><title>Mixing line, exit air with ambient${r.visible ? ' (crosses saturation: visible plume)' : ''}</title></path>`;
+    s += path(pts, 'proc', `style="stroke:${col}"`) + arrow(mid, nxt, col);
+  });
+  [[t1, 0], [t2, 1]].forEach(([r, i]) => {
+    if (!r.ok) return;
+    const x = sx(r.e.t), y = sy(r.e.Wg);
+    s += `<g><title>Exit air, climate ${i + 1}: ${fx(r.e.t, 1)} °C, ${fx(r.e.rh, 0)} % RH</title><circle cx="${x}" cy="${y}" r="13" class="state-badge" style="stroke:${TCOL[i]}"/>${text(x, y, `${i + 1}′`, 'badge-text')}</g>`;
+  });
+  [[a, 0], [b, 1]].forEach(([q, i]) => {
+    const x = sx(q.t), y = sy(q.Wg);
+    s += `<g class="handle" data-i="${i}"><title>Climate ${i + 1}: ${fx(q.t, 2)} °C, ${fx(q.Wg, 2)} g/kg, ${fx(q.rh, 1)} % RH</title>${state.active === i ? `<circle class="ring" cx="${x}" cy="${y}" r="17"/>` : ''}<circle cx="${x}" cy="${y}" r="26" fill="transparent"/><circle class="state-badge" cx="${x}" cy="${y}" r="11" style="stroke:${TCOL[i]}"/>${text(x, y, i + 1, 'badge-text')}</g>`;
+  });
+  return s;
+}
+function drawBudget({a, b, t1, t2}) {
+  const T = (x, y, s_, cls, anc = 'start') => text(x, y, s_, cls, `text-anchor="${anc}"`);
+  const items = [[a, t1, 0], [b, t2, 1]], ok = items.filter(x => x[1].ok);
+  const mx = Math.max(1e-3, ...ok.flatMap(([, r]) => [Math.abs(r.dTpart), Math.abs(r.dHpart), Math.abs(r.drho)])) * 1000;
+  const x0 = 470, k = 190 / mx;
+  let s = `<line x1="${x0}" x2="${x0}" y1="14" y2="244" stroke="#56746c" stroke-width="1.5"/>`;
+  s += T(x0 + 6, 12, 'exit air lighter → helps draft', 'device-note') + T(x0 - 6, 12, '← exit air heavier', 'device-note', 'end');
+  let y = 28;
+  for (const [amb, r, i] of items) {
+    s += T(10, y + 12, `Climate ${i + 1}`, 'device-label') + T(10, y + 28, `${fx(amb.t, 0)} °C · ${fx(amb.rh, 0)} % RH`, 'device-note');
+    if (!r.ok) { s += T(x0 + 6, y + 30, r.reason, 'device-note'); y += 112; continue; }
+    [['Temperature effect', r.dTpart, '#3372a3'], ['Humidity effect', r.dHpart, '#176c67'], ['Net, ρ amb − ρ exit', r.drho, '#19363d']].forEach(([lab, val, col], j) => {
+      const yy = y + j * 28, w = val * 1000 * k;
+      s += `<rect x="${w >= 0 ? x0 : x0 + w}" y="${yy}" width="${Math.max(Math.abs(w), 1)}" height="18" fill="${col}"><title>${lab}: ${sg(val * 1000, 1)} g/m³</title></rect>`;
+      s += T(750, yy + 13, `${sg(val * 1000, 1)} g/m³`, 'device-note', 'end');
+      s += T(140, yy + 13, lab, 'device-note');
+    });
+    y += 112;
+  }
+  $('budget').innerHTML = s;
+}
+
 /* ---------- drawing helpers ---------- */
 const esc = s => String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 const text = (x, y, s, cls = '', extra = '') => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="${cls}" ${extra}>${esc(s)}</text>`;
@@ -320,7 +438,7 @@ const toXY = seg => seg.map(([t, Wg]) => [sx(t), sy(Wg)]);
 /* Sample W(t) along the dry-bulb axis, keeping only the part inside the chart and below saturation. */
 function trace(fn, p) {
   const step = 0.25, n = Math.round((TMAX - TMIN) / step);
-  const ok = t => { const W = fn(t); if (!Number.isFinite(W) || W < -1e-9 || W > M.Wmax(t, p) + 1e-9) return NaN; return Math.max(0, W); };
+  const ok = t => { const W = fn(t); if (!Number.isFinite(W) || W < -1e-9 || W > Math.min(M.Ws(t, p), wTop / 1000) + 1e-9) return NaN; return Math.max(0, W); };
   const refine = (tin, tout) => { for (let k = 0; k < 30; k++) { const m = (tin + tout) / 2; if (Number.isNaN(ok(m))) tout = m; else tin = m; } return [tin, ok(tin) * 1000]; };
   const segs = []; let cur = null, prev = null;
   for (let i = 0; i <= n; i++) {
@@ -341,21 +459,23 @@ function buildBg(p) {
   if (sat.length) s += `<path class="oversat" d="M${toXY(sat).map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L')}L${X0} ${Y0}Z"/>`;
   s += '<g clip-path="url(#chart-clip)">';
   for (let t = 5; t < TMAX; t += 5) s += `<line class="grid" x1="${sx(t)}" x2="${sx(t)}" y1="${Y0}" y2="${Y1}"/>`;
-  for (let W = 5; W < WCAP; W += 5) s += `<line class="grid" x1="${X0}" x2="${X1}" y1="${sy(W)}" y2="${sy(W)}"/>`;
+  const gStep = wTop > 40 ? 10 : 5;
+  for (let W = gStep; W < wTop; W += gStep) s += `<line class="grid" x1="${X0}" x2="${X1}" y1="${sy(W)}" y2="${sy(W)}"/>`;
   s += '</g>';
   const L = state.layers;
-  if (L.v) for (let v = Math.ceil(M.RDA * (TMIN + 273.15) / p / 0.02 - 1e-9) * 0.02; v <= M.RDA * (TMAX + 273.15) / p + 1e-9; v += 0.02) {
+  if (L.v) for (let v = Math.ceil(M.RDA * (TMIN + 273.15) / p / 0.02 - 1e-9) * 0.02; v <= M.RDA * (TMAX + 273.15) * (1 + 1.607858 * wTop / 1000) / p + 1e-9; v += 0.02) {
     const segs = trace(t => (v * p / (M.RDA * (t + 273.15)) - 1) / 1.607858, p);
     let lab = '';
     for (const sg_ of segs) { s += path(toXY(sg_), 'v-line'); const e = sg_[sg_.length - 1]; if (e[1] < 0.2 && e[0] < TMAX - 1) lab = text(sx(e[0]), Y1 - 4, v.toFixed(2), 'lbl v', 'text-anchor="middle"'); }
     s += lab;
   }
-  if (L.h) for (let h = 0; h <= 130; h += 10) {
+  const hStep = wTop > 40 ? 20 : 10, hMax = Math.ceil(M.enthalpy(TMAX, wTop / 1000) / 10) * 10;
+  if (L.h) for (let h = 0; h <= hMax; h += hStep) {
     const segs = trace(t => M.wRaw(t, 'h', h, p), p);
     for (const sg_ of segs) s += path(toXY(sg_), 'h-line');
-    if (segs.length) { const f = segs[0][0]; s += text(sx(f[0]) - 3, sy(f[1]) - (f[1] >= WCAP - 0.01 ? 16 : 5), String(h), 'lbl h', 'text-anchor="end"'); }
+    if (segs.length) { const f = segs[0][0]; s += text(sx(f[0]) - 3, sy(f[1]) - (f[1] >= wTop - 0.01 ? 16 : 5), String(h), 'lbl h', 'text-anchor="end"'); }
   }
-  if (L.wb) for (let tw = 0; tw <= 32; tw += 2) {
+  if (L.wb) for (let tw = 0; tw <= (wTop > 40 ? 46 : 32); tw += wTop > 40 ? 4 : 2) {
     const segs = trace(t => t < tw ? NaN : M.wRaw(t, 'wb', tw, p), p);
     for (const sg_ of segs) s += path(toXY(sg_), 'wb-line');
     if (segs.length) { const f = segs[0][0]; s += text(sx(f[0]) - 5, sy(f[1]) + 4, String(tw), 'lbl wb', 'text-anchor="end"'); }
@@ -365,7 +485,7 @@ function buildBg(p) {
     for (const sg_ of segs) s += path(toXY(sg_), 'rh-line');
     if (segs.length) {
       const seg = segs[segs.length - 1], e = seg[seg.length - 1];
-      s += e[1] >= WCAP - 0.01 ? text(sx(e[0]), Y0 - 4, `${rh}%`, 'lbl rh', 'text-anchor="middle"')
+      s += e[1] >= wTop - 0.01 ? text(sx(e[0]), Y0 - 4, `${rh}%`, 'lbl rh', 'text-anchor="middle"')
                                : text(sx(e[0]) - 3, sy(e[1]) - 3, `${rh}%`, 'lbl rh', 'text-anchor="end"');
     }
   }
@@ -373,7 +493,7 @@ function buildBg(p) {
   if (sat.length) { const e = sat[sat.length - 1]; s += text(sx(e[0]) - 6, Y0 - 4, 'saturation', 'lbl rh', 'text-anchor="end"'); }
   s += `<rect class="frame" x="${X0}" y="${Y0}" width="${X1 - X0}" height="${Y1 - Y0}"/>`;
   for (let t = TMIN; t <= TMAX; t += 5) s += text(sx(t), Y1 + 18, t, 'tick', 'text-anchor="middle"');
-  for (let W = 0; W <= WCAP; W += 5) s += text(X1 + 7, sy(W) + 4, W, 'tick');
+  for (let W = 0; W <= wTop; W += gStep) s += text(X1 + 7, sy(W) + 4, W, 'tick');
   s += text((X0 + X1) / 2, Y1 + 42, 'Dry-bulb temperature, t [°C]', 'axis-label', 'text-anchor="middle"');
   s += `<text class="axis-label" transform="translate(${X1 + 50} ${(Y0 + Y1) / 2}) rotate(90)" text-anchor="middle">Humidity ratio, W [g water / kg dry air]</text>`;
   return s;
@@ -382,6 +502,7 @@ function buildBg(p) {
 /* ---------- dynamic layer ---------- */
 function buildFg(d) {
   if (d.mode === 'duct') return buildFgDuct(d);
+  if (d.mode === 'tower') return buildFgTower(d);
   const {a, b, pr, p} = d;
   const pts = [a, b].map(q => [sx(q.t), sy(q.Wg)]);
   let s = '';
@@ -494,7 +615,7 @@ const svg = $('chart');
 svg.innerHTML = `<defs><clipPath id="chart-clip"><rect x="${X0}" y="${Y0}" width="${X1 - X0}" height="${Y1 - Y0}"/></clipPath></defs><g id="bg"></g><g id="fg"></g>`;
 function renderChart(d) {
   if (!d) return;
-  const key = `${d.p.toFixed(4)}|${Object.values(state.layers).join('')}`;
+  const key = `${d.p.toFixed(4)}|${wTop}|${Object.values(state.layers).join('')}`;
   if (key !== bgKey) { $('bg').innerHTML = buildBg(d.p); bgKey = key; }
   $('fg').innerHTML = buildFg(d);
 }
@@ -505,7 +626,7 @@ function dataAt(e) {
   if (!m || !svg.createSVGPoint) return null;
   const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
   const q = pt.matrixTransform(m.inverse());
-  return {x: q.x, y: q.y, t: (q.x - X0) / (X1 - X0) * (TMAX - TMIN) + TMIN, Wg: (Y1 - q.y) / (Y1 - Y0) * WCAP};
+  return {x: q.x, y: q.y, t: (q.x - X0) / (X1 - X0) * (TMAX - TMIN) + TMIN, Wg: (Y1 - q.y) / (Y1 - Y0) * wTop};
 }
 function place(i, t, Wg) {
   const s = state.s[i], p = P();
@@ -551,7 +672,7 @@ svg.addEventListener('pointercancel', endDrag);
 svg.addEventListener('pointerleave', () => { if (!drag) $('cursor').textContent = 'Move the pointer over the chart to read values.'; });
 function readout(d) {
   const p = P();
-  if (d.t < TMIN || d.t > TMAX || d.Wg < 0 || d.Wg > WCAP) return;
+  if (d.t < TMIN || d.t > TMAX || d.Wg < 0 || d.Wg > wTop) return;
   const W = d.Wg / 1000, ws = M.Ws(d.t, p);
   $('cursor').textContent = W > ws
     ? `t = ${fx(d.t, 1)} °C · W = ${fx(d.Wg, 2)} g/kg · above saturation`

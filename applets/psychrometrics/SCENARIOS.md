@@ -24,3 +24,14 @@ enthalpy change is small compared with the sensible and latent parts.
 | Summer, cooling coil + reheat | 30 degC, 60 % RH | cooling coil 8 degC, BF 0.20; heating coil 25 degC, BF 0.30 |
 | Winter, heating coil + steam | 10 degC, 30 % RH | heating coil 35 degC, BF 0.30; steam 100 degC, 4 g/kg |
 | Winter, heating coil + water spray | 10 degC, 30 % RH | heating coil 40 degC, BF 0.20; water 15 degC, 5 g/kg |
+
+## Tower mode presets
+
+Hot water 40 degC, 6000 kg/s, 110 m unless noted. Climate 2 is 45 degC, 10 % RH in every preset.
+
+| Scenario | Climate 1 |
+|---|---|
+| Cool humid vs hot dry | 15 degC, 80 % RH |
+| Mild vs hot dry | 25 degC, 50 % RH |
+| Hot humid vs hot dry | 35 degC, 60 % RH |
+| Taller tower, mild vs hot dry (200 m) | 25 degC, 50 % RH |

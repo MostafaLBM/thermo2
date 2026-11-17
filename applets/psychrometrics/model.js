@@ -178,6 +178,65 @@
       balance: m * (last.h - a.h) - (Qc - cond + Ehum) };
   }
 
-  return { coil, humidifier, step, duct, EPS, RDA, TMIN, TMAX, WCAP, pAtm, pws, Ws, Wmax, pwOfW, enthalpy, volume, dewPoint, wbW, wetBulb,
+
+  /* Natural-draft counterflow wet cooling tower, Merkel model (Lewis factor 1, water loss neglected in the
+     water balance), with air flow solved from the draft balance. Typical fixed internals (teaching values). */
+  const TOWER = { K: 15, c: 1.8, n: 0.6, A: 3000 };   // loss coeff. at fill area, fill c and n in Me = c (L/G)^-n, fill area m²
+  function tower(a, cfg, p) {
+    const { Tin, L, H } = cfg, cpw = 4.186, g = 9.81, { K, c, n, A } = TOWER;
+    const hs = t => enthalpy(t, Ws(t, p));
+    const rhoOf = (t, W) => p * 1000 / (RDA * 1000 * (t + 273.15)) * (1 + W) / (1 + 1.607858 * W);
+    if (Tin <= a.twb + 0.3) return { ok: false, reason: 'Hot water is not warmer than the wet bulb: no evaporative cooling.' };
+    const merkel = (Tout, LG) => {
+      const N = 40; let sum = 0;
+      for (let i = 0; i < N; i++) {
+        const T = Tout + (i + 0.5) / N * (Tin - Tout), d = hs(T) - (a.h + LG * cpw * (T - Tout));
+        if (d <= 1e-6) return Infinity;
+        sum += cpw * (Tin - Tout) / N / d;
+      }
+      return sum;
+    };
+    const airPath = (Tout, LG) => {                        // march along water temperature
+      const N = 40, pts = []; let W = a.W, T = Tout, dT = (Tin - Tout) / N;
+      const hAir = Tw => a.h + LG * cpw * (Tw - Tout);
+      const rate = (Tw, Wc) => { const d = Math.max(hs(Tw) - hAir(Tw), 1e-6); return LG * cpw * (Ws(Tw, p) - Wc) / d; };
+      const tAir = (h, Wc) => (h - HG0 * Wc) / (CPA + CPV * Wc);
+      pts.push({ t: tAir(hAir(T), W), Wg: W * 1000, Tw: T });
+      for (let i = 0; i < N; i++) {
+        const k1 = rate(T, W), k2 = rate(T + dT / 2, W + k1 * dT / 2);
+        W += k2 * dT; T += dT;
+        const t = tAir(hAir(T), W); W = Math.min(W, Ws(t, p));
+        pts.push({ t, Wg: W * 1000, Tw: T });
+      }
+      return pts;
+    };
+    const solveAt = G => {
+      const LG = L / G, Me = c * Math.pow(LG, -n);
+      let lo = a.twb + 0.02, hi = Tin - 0.02;
+      if (merkel(lo, LG) < Me) return null;
+      for (let i = 0; i < 45; i++) { const m = (lo + hi) / 2; if (merkel(m, LG) > Me) lo = m; else hi = m; }
+      const Tout = (lo + hi) / 2, path = airPath(Tout, LG), last = path[path.length - 1], e = props(last.t, last.Wg / 1000, p);
+      const rhoA = rhoOf(a.t, a.W), rhoE = rhoOf(e.t, e.W);
+      return { G, LG, Me, Tout, path, e, rhoA, rhoE, dp: g * H * (rhoA - rhoE), loss: K * G * G / (2 * rhoA * A * A) };
+    };
+    const f = G => { const r = solveAt(G); return r ? r.dp - r.loss : -1e9; };
+    let lo = 50, hi = 40000;
+    if (f(lo) <= 0) return { ok: false, reason: 'No draft: buoyancy cannot overcome the losses at any air flow.' };
+    for (let i = 0; i < 45; i++) { const m = (lo + hi) / 2; if (f(m) > 0) lo = m; else hi = m; }
+    const r = solveAt((lo + hi) / 2);
+    if (!r) return { ok: false, reason: 'No solution for this fill and water flow.' };
+    const e = r.e, evap = r.G * (e.W - a.W);
+    const rhoTe = rhoOf(e.t, a.W);                         // exit temperature, ambient humidity
+    const mix = []; let visible = false;
+    for (let k = 0; k <= 30; k++) {
+      const x = k / 30, h = x * a.h + (1 - x) * e.h, W = x * a.W + (1 - x) * e.W, t = (h - HG0 * W) / (CPA + CPV * W);
+      if (W > Ws(t, p) + 1e-9) visible = true;
+      mix.push([t, W * 1000]);
+    }
+    return { ok: true, ...r, range: Tin - r.Tout, approach: r.Tout - a.twb, Q: L * cpw * (Tin - r.Tout) / 1000,
+      evap, makeup: 100 * evap / L, drho: r.rhoA - r.rhoE, dTpart: r.rhoA - rhoTe, dHpart: rhoTe - r.rhoE, mix, visible };
+  }
+
+  return { tower, TOWER, coil, humidifier, step, duct, EPS, RDA, TMIN, TMAX, WCAP, pAtm, pws, Ws, Wmax, pwOfW, enthalpy, volume, dewPoint, wbW, wetBulb,
     wRaw, wFrom, valueOf, bounds, props, adp, classify, process };
 });
